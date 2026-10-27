@@ -1,0 +1,5 @@
+/.vscode
+/main.o
+/my_shell
+/parser.o
+/syscalls.o
