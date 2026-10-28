@@ -1,9 +1,4 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-
-#define MAX_INPUT 20
-
+#include "parser.h"
 
 void remove_extra_spaces(char *str) {
     int i = 0; // Pointer to read the original string
@@ -59,7 +54,6 @@ int count_number_of_commands(char* str) {
 char** parse_command(char* command) {    
     // calculate number of commands
     int number_of_commands = count_number_of_commands(command);
-    printf("Number of commands: %d\n", number_of_commands);
 
     // get all the commands
     char** commands = (char**)malloc(number_of_commands * sizeof(char*));
@@ -109,13 +103,6 @@ char** parse_command(char* command) {
         // Explicitly null-terminate the destination
         commands[command_index][len] = '\0';
     }
-
-    printf("All the commands are:\n");
-    for (int i = 0; i < number_of_commands; ++i)
-    {
-        printf("%s", commands[i]);
-        printf("\n");
-    }
     
 
 
@@ -130,7 +117,8 @@ char** parse_command(char* command) {
 // false - for interruption - stop shell
 bool read_user_input() {
     //start the shell
-    printf("myshell$ ");
+    getcwd(dest, sizeof(dest));
+    printf("myshell:%s$ ", dest);
 
     //get the input commands
     char input[MAX_INPUT];
@@ -160,12 +148,29 @@ bool read_user_input() {
     }
 
 
-    printf("You entered '%s'\n", input);
 
-    char** commands = parse_command(input);  
+    char** commands = parse_command(input);
     
     if (commands == nullptr) {
         return false;
+    }
+
+    int code = execute_command(commands);
+
+    switch (code)
+    {
+    case 0:
+        return true;
+        break;
+    case -1:
+        return false;
+        break;
+    case 99:
+        printf("Bye!\n");
+        return false;
+        break;
+    default:
+        break;
     }
 
     return true;
