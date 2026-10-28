@@ -3,3 +3,4 @@
 /my_shell
 /parser.o
 /syscalls.o
+executor.o
