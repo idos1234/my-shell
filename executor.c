@@ -15,7 +15,6 @@ bool is_buitlin(char* command) {
     
 }
 
-
 int execute_cd(char ** argv) {
     if(argv[1] != nullptr && argv[2] != nullptr) {
         return -2;
@@ -49,11 +48,33 @@ int execute_builtin(char **argv) {
 }
 
 
+
+
 int execute_command(char **argv) { 
     if(is_buitlin(argv[0])) {
         return execute_builtin(argv);
     } else {
+        //execute command
 
+        pid_t pid = fork();
+        
+        if(pid == 0) {
+            //child - execute command
+            execvp(argv[0], argv);
+
+            perror("myshell");
+            exit(EXIT_FAILURE);
+        } else if(pid > 0) {
+            int status;
+            pid_t terminated_pid = waitpid(pid, &status, 0);
+
+            if (WIFSIGNALED(status)) {
+                // Child was abnormally terminated by a signal
+                int signal_num = WTERMSIG(status);
+                printf("[Parent] Child %d was killed by signal: %d\n", terminated_pid, signal_num);
+                return -1;
+            }
+        }
     }
     
     return 0;

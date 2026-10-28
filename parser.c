@@ -56,7 +56,9 @@ char** parse_command(char* command) {
     int number_of_commands = count_number_of_commands(command);
 
     // get all the commands
-    char** commands = (char**)malloc(number_of_commands * sizeof(char*));
+    char** commands = (char**)malloc((number_of_commands + 1) * sizeof(char*));
+    commands[number_of_commands] = nullptr;
+    
     if(!commands) {
         return nullptr;
     }
