@@ -6,7 +6,8 @@
 typedef struct {
     char **argv;
     int argc;
-    char* filename;
+    char* output_filename;
+    char* input_filename;
 } Command;
 
 void clear_command(Command* command);

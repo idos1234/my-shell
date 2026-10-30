@@ -114,6 +114,7 @@ Command parse_command(char* str) {
 int check_for_redirect(Command* command) {
     for (int i = 0; i < command->argc; ++i)
     {
+        // check for output redirection
         if(!strcmp(command->argv[i], ">")) {
             //check if file exists
             if(i == (command->argc - 1)) {
@@ -121,23 +122,68 @@ int check_for_redirect(Command* command) {
                 return 0;
             }
             //clear previous file
-            if(command->filename) {
-                free(command->filename);
+            if(command->output_filename) {
+                free(command->output_filename);
             }
 
             //set the new file
-            command->filename = strdup(command->argv[i + 1]);
-            if(!command->filename) {
+            command->output_filename = strdup(command->argv[i + 1]);
+            if(!command->output_filename) {
                 return -1;
             }
 
             //remove > and filename from the argv
+            for (int j = i; j <= command->argc - 2; ++j) {
+                command->argv[j] = command->argv[j + 2];
+            }
+            
             command->argc = command->argc - 2;
             command->argv = realloc(command->argv, (command->argc + 1) * sizeof(char*));
             if(!command->argv) {
                 return -1;
             }
             command->argv[command->argc] = nullptr;
+
+            if(i >= command->argc) {
+                break;
+            }
+            --i;
+        }
+
+        // check for output redirection
+        else if(!strcmp(command->argv[i], "<")) {
+            //check if file exists
+            if(i == (command->argc - 1)) {
+                perror("redirect: no file found");
+                return 0;
+            }
+            //clear previous file
+            if(command->input_filename) {
+                free(command->input_filename);
+            }
+
+            //set the new file
+            command->input_filename = strdup(command->argv[i + 1]);
+            if(!command->input_filename) {
+                return -1;
+            }
+
+            //remove > and filename from the argv
+            for (int j = i; j <= command->argc - 2; ++j) {
+                command->argv[j] = command->argv[j + 2];
+            }
+
+            command->argc = command->argc - 2;
+            command->argv = realloc(command->argv, (command->argc + 1) * sizeof(char*));
+            if(!command->argv) {
+                return -1;
+            }
+            command->argv[command->argc] = nullptr;
+
+            if(i >= command->argc) {
+                break;
+            }
+            --i;
         }
     }
 

@@ -9,10 +9,14 @@ void clear_command(Command* command) {
     if(command->argv) {
         free(command->argv);
     }
-    if(command->filename) {
-        free(command->filename);
+    if(command->output_filename) {
+        free(command->output_filename);
     }
-    command->filename = nullptr;
+    if(command->input_filename) {
+        free(command->input_filename);
+    }
+    command->input_filename = nullptr;
+    command->output_filename = nullptr;
     command->argv = nullptr;
     command->argc = 0;
     

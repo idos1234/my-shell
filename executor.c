@@ -57,14 +57,25 @@ int execute_command(Command* command) {
         pid_t pid = fork();
         
         if(pid == 0) {
-            if (command->filename != nullptr) {
-                int fd = open(command->filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (command->output_filename != nullptr) {
+                int fd = open(command->output_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 if (fd < 0) {
                     perror("myshell: open error");
                     exit(EXIT_FAILURE);
                 }
                 // set stdout - the file
                 dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+
+            if (command->input_filename != nullptr) {
+                int fd = open(command->input_filename, O_RDONLY, 0644);
+                if (fd < 0) {
+                    perror("myshell: open error");
+                    exit(EXIT_FAILURE);
+                }
+                // set stdout - the file
+                dup2(fd, STDIN_FILENO);
                 close(fd);
             }
 
