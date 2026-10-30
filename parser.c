@@ -60,44 +60,39 @@ Command parse_command(char* str) {
 
     // get all the argv
     command.argv = (char**)malloc((command.argc + 1) * sizeof(char*));
-    command.argv[command.argc] = nullptr;
-    
     if(!command.argv) {
         clear_command(&command);
         return command;
     }
+    command.argv[command.argc] = nullptr;
 
     int start_index = 0;
-    int end_index = 1;
+    int end_index = 0;
     int command_index = 0;  
     
     while(str[end_index] != '\0') {
         if(str[end_index] == ' ') {
-            // add new argument to argv
-            command.argv[command_index] = (char*)malloc((end_index - start_index + 1) * sizeof(char));
-            if(!command.argv[command_index]) {
-                clear_command(&command);
-                return command;
-            }
-            
             int len = end_index - start_index;
-
-            // Copy the substring
-            strncpy(command.argv[command_index], str + start_index, len);
-
-            // Explicitly null-terminate the destination
-            command.argv[command_index][len] = '\0'; 
-
-            ++command_index;
+            if (len > 0) {
+                command.argv[command_index] = (char*)malloc(len + 1);
+                if(!command.argv[command_index]) {
+                    clear_command(&command);
+                    return command;
+                }
+                strncpy(command.argv[command_index], str + start_index, len);
+                command.argv[command_index][len] = '\0'; 
+                ++command_index;
+            }
             start_index = end_index + 1;
-            end_index = start_index;
         }
 
         ++end_index;
     }
 
-    if(command.argc == command_index + 1) {
-        command.argv[command_index] = (char*)malloc((end_index - start_index + 1) * sizeof(char));
+    //handle the last word in the line
+    int len = end_index - start_index;
+    if (len > 0 && command_index < command.argc) {
+        command.argv[command_index] = (char*)malloc((len + 1) * sizeof(char));
         if(!command.argv[command_index]) {
             clear_command(&command);
             return command;
@@ -112,7 +107,6 @@ Command parse_command(char* str) {
         command.argv[command_index][len] = '\0';
     }
     
-
 
     return command;
 }
@@ -132,20 +126,18 @@ int check_for_redirect(Command* command) {
             }
 
             //set the new file
-            command->filename = malloc((strlen(command->argv[i + 1]) + 1) * sizeof(char));
+            command->filename = strdup(command->argv[i + 1]);
             if(!command->filename) {
                 return -1;
             }
-            strncpy(command->filename, command->argv[i+1], strlen(command->argv[i+1]));
 
             //remove > and filename from the argv
-            command->argv[command->argc - 1] = nullptr;
-            command->argv[command->argc - 2] = nullptr;
             command->argc = command->argc - 2;
-            command->argv = realloc(command->argv, command->argc * sizeof(char*));
+            command->argv = realloc(command->argv, (command->argc + 1) * sizeof(char*));
             if(!command->argv) {
                 return -1;
             }
+            command->argv[command->argc] = nullptr;
         }
     }
 

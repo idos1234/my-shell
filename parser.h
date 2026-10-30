@@ -9,7 +9,7 @@
 #include "command_struct.h"
 
 
-#define MAX_INPUT 20
+#define MAX_INPUT 500
 
 bool read_user_input();
 
