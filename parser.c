@@ -51,64 +51,143 @@ int count_number_of_commands(char* str) {
     return count+1;
 }
 
-char** parse_command(char* command) {    
-    // calculate number of commands
-    int number_of_commands = count_number_of_commands(command);
+Command parse_command(char* str) {    
+    // create command obj
+    Command command = {0};
 
-    // get all the commands
-    char** commands = (char**)malloc((number_of_commands + 1) * sizeof(char*));
-    commands[number_of_commands] = nullptr;
-    
-    if(!commands) {
-        return nullptr;
+    // calculate argc
+    command.argc = count_number_of_commands(str);
+
+    // get all the argv
+    command.argv = (char**)malloc((command.argc + 1) * sizeof(char*));
+    if(!command.argv) {
+        clear_command(&command);
+        return command;
     }
+    command.argv[command.argc] = nullptr;
 
     int start_index = 0;
-    int end_index = 1;
-    int command_index = 0;
+    int end_index = 0;
+    int command_index = 0;  
     
-    while(command[end_index] != '\0') {
-        if(command[end_index] == ' ') {
-            // add new command
-            commands[command_index] = (char*)malloc((end_index - start_index + 1) * sizeof(char));
-            if(!commands[command_index]) {
-                return nullptr;
-            }
-            
+    while(str[end_index] != '\0') {
+        if(str[end_index] == ' ') {
             int len = end_index - start_index;
-
-            // Copy the substring
-            strncpy(commands[command_index], command + start_index, len);
-
-            // Explicitly null-terminate the destination
-            commands[command_index][len] = '\0'; 
-
-            ++command_index;
+            if (len > 0) {
+                command.argv[command_index] = (char*)malloc(len + 1);
+                if(!command.argv[command_index]) {
+                    clear_command(&command);
+                    return command;
+                }
+                strncpy(command.argv[command_index], str + start_index, len);
+                command.argv[command_index][len] = '\0'; 
+                ++command_index;
+            }
             start_index = end_index + 1;
-            end_index = start_index;
         }
 
         ++end_index;
     }
 
-    if(number_of_commands == command_index + 1) {
-        commands[command_index] = (char*)malloc((end_index - start_index + 1) * sizeof(char));
-        if(!commands[command_index]) {
-            return nullptr;
+    //handle the last word in the line
+    int len = end_index - start_index;
+    if (len > 0 && command_index < command.argc) {
+        command.argv[command_index] = (char*)malloc((len + 1) * sizeof(char));
+        if(!command.argv[command_index]) {
+            clear_command(&command);
+            return command;
         }
         
         int len = end_index - start_index;
 
         // Copy the substring
-        strncpy(commands[command_index], command + start_index, len);
+        strncpy(command.argv[command_index], str + start_index, len);
 
         // Explicitly null-terminate the destination
-        commands[command_index][len] = '\0';
+        command.argv[command_index][len] = '\0';
     }
     
 
+    return command;
+}
 
-    return commands;
+int check_for_redirect(Command* command) {
+    for (int i = 0; i < command->argc; ++i)
+    {
+        // check for output redirection
+        if(!strcmp(command->argv[i], ">")) {
+            //check if file exists
+            if(i == (command->argc - 1)) {
+                perror("redirect: no file found");
+                return 0;
+            }
+            //clear previous file
+            if(command->output_filename) {
+                free(command->output_filename);
+            }
+
+            //set the new file
+            command->output_filename = strdup(command->argv[i + 1]);
+            if(!command->output_filename) {
+                return -1;
+            }
+
+            //remove > and filename from the argv
+            for (int j = i; j <= command->argc - 2; ++j) {
+                command->argv[j] = command->argv[j + 2];
+            }
+            
+            command->argc = command->argc - 2;
+            command->argv = realloc(command->argv, (command->argc + 1) * sizeof(char*));
+            if(!command->argv) {
+                return -1;
+            }
+            command->argv[command->argc] = nullptr;
+
+            if(i >= command->argc) {
+                break;
+            }
+            --i;
+        }
+
+        // check for output redirection
+        else if(!strcmp(command->argv[i], "<")) {
+            //check if file exists
+            if(i == (command->argc - 1)) {
+                perror("redirect: no file found");
+                return 0;
+            }
+            //clear previous file
+            if(command->input_filename) {
+                free(command->input_filename);
+            }
+
+            //set the new file
+            command->input_filename = strdup(command->argv[i + 1]);
+            if(!command->input_filename) {
+                return -1;
+            }
+
+            //remove > and filename from the argv
+            for (int j = i; j <= command->argc - 2; ++j) {
+                command->argv[j] = command->argv[j + 2];
+            }
+
+            command->argc = command->argc - 2;
+            command->argv = realloc(command->argv, (command->argc + 1) * sizeof(char*));
+            if(!command->argv) {
+                return -1;
+            }
+            command->argv[command->argc] = nullptr;
+
+            if(i >= command->argc) {
+                break;
+            }
+            --i;
+        }
+    }
+
+    return 0;
 }
 
 
@@ -150,14 +229,18 @@ bool read_user_input() {
     }
 
 
-
-    char** commands = parse_command(input);
+    Command command = parse_command(input);
     
-    if (commands == nullptr) {
+    if (command.argv == nullptr) {
         return false;
     }
 
-    int code = execute_command(commands);
+    int code_redirect = check_for_redirect(&command); 
+    if(code_redirect != 0) {
+        return code_redirect;
+    }
+
+    int code = execute_command(&command);
 
     switch (code)
     {

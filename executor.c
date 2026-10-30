@@ -48,19 +48,40 @@ int execute_builtin(char **argv) {
 }
 
 
-
-
-int execute_command(char **argv) { 
-    if(is_buitlin(argv[0])) {
-        return execute_builtin(argv);
+int execute_command(Command* command) {
+    if(is_buitlin(command->argv[0])) {
+        return execute_builtin(command->argv);
     } else {
         //execute command
 
         pid_t pid = fork();
         
         if(pid == 0) {
+            if (command->output_filename != nullptr) {
+                int fd = open(command->output_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd < 0) {
+                    perror("myshell: open error");
+                    exit(EXIT_FAILURE);
+                }
+                // set stdout - the file
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+
+            if (command->input_filename != nullptr) {
+                int fd = open(command->input_filename, O_RDONLY, 0644);
+                if (fd < 0) {
+                    perror("myshell: open error");
+                    exit(EXIT_FAILURE);
+                }
+                // set stdout - the file
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+
+
             //child - execute command
-            execvp(argv[0], argv);
+            execvp(command->argv[0], command->argv);
 
             perror("myshell");
             exit(EXIT_FAILURE);

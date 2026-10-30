@@ -7,7 +7,7 @@ ASFLAGS = -f elf64
 TARGET = my_shell
 
 # obj files
-OBJS = main.o parser.o syscalls.o executor.o
+OBJS = main.o parser.o syscalls.o executor.o command_struct.o
 
 # make
 all: $(TARGET)
@@ -27,6 +27,10 @@ parser.o: parser.c parser.h
 # compile executor.c
 executor.o: executor.c executor.h
 	$(CC) $(CFLAGS) -c executor.c
+
+# compile command_struct.c
+command_struct.o: command_struct.c command_struct.h
+	$(CC) $(CFLAGS) -c command_struct.c
 
 # compile syscalls.s
 syscalls.o: syscalls.s
