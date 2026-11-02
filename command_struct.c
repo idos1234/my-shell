@@ -19,6 +19,7 @@ void clear_command(Command* command) {
     command->output_filename = nullptr;
     command->argv = nullptr;
     command->argc = 0;
+    command->append_output = false;
     
 }
 
