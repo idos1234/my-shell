@@ -15,6 +15,6 @@
 #define NUMBER_OF_BUILTIN 2
 
 extern char dest[256];
-int execute_command(Command *command);
+int execute_pipeline(Pipeline *pipeline);
 
 #endif

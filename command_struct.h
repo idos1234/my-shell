@@ -10,6 +10,12 @@ typedef struct {
     char* input_filename;
 } Command;
 
+typedef struct Pipeline {
+    Command *commands;
+    int command_count;
+} Pipeline;
+
 void clear_command(Command* command);
+void clear_pipeline(Pipeline* pipeline);
 
 #endif

@@ -51,64 +51,20 @@ int count_number_of_commands(char* str) {
     return count+1;
 }
 
-Command parse_command(char* str) {    
-    // create command obj
-    Command command = {0};
+int count_number_of_pipelines(char* str) {
+    int count = 0;
+    int i = 0;
 
-    // calculate argc
-    command.argc = count_number_of_commands(str);
-
-    // get all the argv
-    command.argv = (char**)malloc((command.argc + 1) * sizeof(char*));
-    if(!command.argv) {
-        clear_command(&command);
-        return command;
-    }
-    command.argv[command.argc] = nullptr;
-
-    int start_index = 0;
-    int end_index = 0;
-    int command_index = 0;  
-    
-    while(str[end_index] != '\0') {
-        if(str[end_index] == ' ') {
-            int len = end_index - start_index;
-            if (len > 0) {
-                command.argv[command_index] = (char*)malloc(len + 1);
-                if(!command.argv[command_index]) {
-                    clear_command(&command);
-                    return command;
-                }
-                strncpy(command.argv[command_index], str + start_index, len);
-                command.argv[command_index][len] = '\0'; 
-                ++command_index;
-            }
-            start_index = end_index + 1;
+    while(str[i] != '\0') {
+        if(str[i] == '|') {
+            ++count;
         }
 
-        ++end_index;
+        ++i;
     }
 
-    //handle the last word in the line
-    int len = end_index - start_index;
-    if (len > 0 && command_index < command.argc) {
-        command.argv[command_index] = (char*)malloc((len + 1) * sizeof(char));
-        if(!command.argv[command_index]) {
-            clear_command(&command);
-            return command;
-        }
-        
-        int len = end_index - start_index;
-
-        // Copy the substring
-        strncpy(command.argv[command_index], str + start_index, len);
-
-        // Explicitly null-terminate the destination
-        command.argv[command_index][len] = '\0';
-    }
+    return count;
     
-
-    return command;
 }
 
 int check_for_redirect(Command* command) {
@@ -191,7 +147,125 @@ int check_for_redirect(Command* command) {
 }
 
 
+Command parse_command(char* str) {    
+    // create command obj
+    Command command = {0};
 
+    // calculate argc
+    command.argc = count_number_of_commands(str);
+
+    // get all the argv
+    command.argv = (char**)malloc((command.argc + 1) * sizeof(char*));
+    if(!command.argv) {
+        clear_command(&command);
+        return command;
+    }
+    command.argv[command.argc] = nullptr;
+
+    int start_index = 0;
+    int end_index = 0;
+    int command_index = 0;  
+    
+    while(str[end_index] != '\0') {
+        if(str[end_index] == ' ') {
+            int len = end_index - start_index;
+            if (len > 0) {
+                command.argv[command_index] = (char*)malloc(len + 1);
+                if(!command.argv[command_index]) {
+                    clear_command(&command);
+                    return command;
+                }
+                strncpy(command.argv[command_index], str + start_index, len);
+                command.argv[command_index][len] = '\0'; 
+                ++command_index;
+            }
+            start_index = end_index + 1;
+        }
+
+        ++end_index;
+    }
+
+    //handle the last word in the line
+    int len = end_index - start_index;
+    if (len > 0 && command_index < command.argc) {
+        command.argv[command_index] = (char*)malloc((len + 1) * sizeof(char));
+        if(!command.argv[command_index]) {
+            clear_command(&command);
+            return command;
+        }
+        
+        int len = end_index - start_index;
+
+        // Copy the substring
+        strncpy(command.argv[command_index], str + start_index, len);
+
+        // Explicitly null-terminate the destination
+        command.argv[command_index][len] = '\0';
+    }
+    
+
+    return command;
+}
+
+Pipeline parse_pipeline(char *str) {
+    // create pipeline obj
+    Pipeline pipeline = {0};
+
+    // calculate how many commands there are
+    pipeline.command_count = count_number_of_pipelines(str) + 1;
+
+    // get all the commands array
+    pipeline.commands = (Command*)malloc((pipeline.command_count + 1) * sizeof(Command));
+    if(!pipeline.commands) {
+        clear_pipeline(&pipeline);
+        return pipeline;
+    }
+
+    int start_index = 0;
+    int cmd_idx = 0;
+    int i = 0;
+
+    while (str[i] != '\0') {
+        if (str[i] == '|') {
+            // get sub string until |
+            int len = i - start_index;
+            char *sub_cmd_str = (char*)malloc(len + 1);
+            strncpy(sub_cmd_str, str + start_index, len);
+            sub_cmd_str[len] = '\0';
+
+            //remove extra spaces - around the pipe line
+            remove_extra_spaces(sub_cmd_str);
+            
+            // parse the current command
+            pipeline.commands[cmd_idx] = parse_command(sub_cmd_str);
+
+            int code_redirect = check_for_redirect(&pipeline.commands[cmd_idx]); // check for redirects
+            if(code_redirect != 0) {
+                clear_pipeline(&pipeline);
+                return pipeline;
+            }
+            
+            free(sub_cmd_str);
+            cmd_idx++;
+            start_index = i + 1;
+        }
+        i++;
+    }
+
+    // handle the last command
+    int len = i - start_index;
+    char *sub_cmd_str = (char*)malloc(len + 1);
+    strncpy(sub_cmd_str, str + start_index, len);
+    sub_cmd_str[len] = '\0';
+    
+    remove_extra_spaces(sub_cmd_str);
+    pipeline.commands[cmd_idx] = parse_command(sub_cmd_str);
+    check_for_redirect(&pipeline.commands[cmd_idx]);
+    
+    free(sub_cmd_str);
+
+    return pipeline;
+}
 
 // Wait for commands
 // true - for normal commands
@@ -229,18 +303,14 @@ bool read_user_input() {
     }
 
 
-    Command command = parse_command(input);
+    Pipeline pipeline = parse_pipeline(input);
     
-    if (command.argv == nullptr) {
+    if (pipeline.commands == nullptr) {
         return false;
     }
 
-    int code_redirect = check_for_redirect(&command); 
-    if(code_redirect != 0) {
-        return code_redirect;
-    }
 
-    int code = execute_command(&command);
+    int code = execute_pipeline(&pipeline);
 
     switch (code)
     {

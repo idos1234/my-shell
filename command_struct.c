@@ -21,3 +21,17 @@ void clear_command(Command* command) {
     command->argc = 0;
     
 }
+
+void clear_pipeline(Pipeline* pipeline) {
+    for (int i = 0; i < pipeline->command_count; ++i)
+    {
+        clear_command(&pipeline->commands[i]);
+    }
+
+    if(pipeline->commands) {
+        free(pipeline->commands);
+    }
+
+    pipeline->commands = nullptr;
+    pipeline->command_count = 0;
+}
