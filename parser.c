@@ -185,6 +185,51 @@ int check_for_redirect(Command* command) {
             --i;
         }
 
+        // check for input - heredoc redirection
+        else if(!strcmp(command->argv[i], "<<")) {
+            if (i == (command->argc - 1)) {
+                perror("redirect: no delimiter found");
+                return 0;
+            }
+
+            // Clear previous delimiter if exists
+            if (command->heredoc_delimiter) {
+                free(command->heredoc_delimiter);
+            }
+
+            // Set the new delimiter and clean any hidden \r, \n, or spaces
+            command->heredoc_delimiter = strdup(command->argv[i + 1]);
+            if (!command->heredoc_delimiter) {
+                return -1;
+            }
+
+            int delim_len = strlen(command->heredoc_delimiter);
+            while (delim_len > 0 && (command->heredoc_delimiter[delim_len - 1] == '\n' || 
+                                     command->heredoc_delimiter[delim_len - 1] == '\r' || 
+                                     command->heredoc_delimiter[delim_len - 1] == ' ' || 
+                                     command->heredoc_delimiter[delim_len - 1] == '\t')) {
+                command->heredoc_delimiter[delim_len - 1] = '\0';
+                delim_len--;
+            }
+
+            // Remove << and the delimiter from argv
+            for (int j = i; j <= command->argc - 2; ++j) {
+                command->argv[j] = command->argv[j + 2];
+            }
+
+            command->argc = command->argc - 2;
+            command->argv = realloc(command->argv, (command->argc + 1) * sizeof(char*));
+            if (!command->argv) {
+                return -1;
+            }
+            command->argv[command->argc] = nullptr;
+
+            if (i >= command->argc) {
+                break;
+            }
+            --i;
+        }
+
     }
 
     return 0;

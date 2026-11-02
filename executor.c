@@ -54,6 +54,47 @@ int execute_command(Command* command) {
     } else {
         //execute command
 
+        int heredoc_fd[2];
+        bool has_heredoc = (command->heredoc_delimiter != nullptr);
+
+        // If there is a heredoc, the parent reads the input before forking
+        if (has_heredoc) {
+            if(pipe(heredoc_fd) == -1) {
+                perror("myshell: pipe error");
+                return -1;
+            }
+
+            while (true) {
+                // Print the prompt first (just like Bash does for every line)
+                printf("> ");
+                fflush(stdout);
+
+                char buffer[1024];
+                if (fgets(buffer, sizeof(buffer), stdin) == nullptr) {
+                    break;
+                }
+
+                // Remove trailing newline, carriage return, spaces, and tabs
+                int len = strlen(buffer);
+                while (len > 0 && (buffer[len - 1] == '\n' || buffer[len - 1] == '\r' || buffer[len - 1] == ' ' || buffer[len - 1] == '\t')) {
+                    buffer[len - 1] = '\0';
+                    len--;
+                }
+
+                // Check if it matches the delimiter immediately
+                if (strcmp(buffer, command->heredoc_delimiter) == 0) {
+                    break; // Exit right away, no extra prompt will be printed!
+                }
+
+                // Write to the pipe
+                write(heredoc_fd[1], buffer, strlen(buffer));
+                write(heredoc_fd[1], "\n", 1);
+            }
+
+            // Close the write end in the parent so the reader doesn't hang
+            close(heredoc_fd[1]);
+        }
+
         pid_t pid = fork();
         
         if(pid == 0) {
@@ -85,6 +126,10 @@ int execute_command(Command* command) {
                 close(fd);
             }
 
+            if (has_heredoc) {
+                dup2(heredoc_fd[0], STDIN_FILENO);
+                close(heredoc_fd[0]);
+            }
 
             //child - execute command
             execvp(command->argv[0], command->argv);
