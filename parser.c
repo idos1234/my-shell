@@ -88,6 +88,9 @@ int check_for_redirect(Command* command) {
                 return -1;
             }
 
+            //set append as false
+            command->append_output = false;
+
             //remove > and filename from the argv
             for (int j = i; j <= command->argc - 2; ++j) {
                 command->argv[j] = command->argv[j + 2];
@@ -124,6 +127,7 @@ int check_for_redirect(Command* command) {
                 return -1;
             }
 
+
             //remove > and filename from the argv
             for (int j = i; j <= command->argc - 2; ++j) {
                 command->argv[j] = command->argv[j + 2];
@@ -141,6 +145,46 @@ int check_for_redirect(Command* command) {
             }
             --i;
         }
+
+        // check for output - append redirection
+        else if(!strcmp(command->argv[i], ">>")) {
+            //check if file exists
+            if(i == (command->argc - 1)) {
+                perror("redirect: no file found");
+                return 0;
+            }
+            //clear previous file
+            if(command->output_filename) {
+                free(command->output_filename);
+            }
+
+            //set the new file
+            command->output_filename = strdup(command->argv[i + 1]);
+            if(!command->output_filename) {
+                return -1;
+            }
+
+            //set append as true
+            command->append_output = true;
+
+            //remove > and filename from the argv
+            for (int j = i; j <= command->argc - 2; ++j) {
+                command->argv[j] = command->argv[j + 2];
+            }
+            
+            command->argc = command->argc - 2;
+            command->argv = realloc(command->argv, (command->argc + 1) * sizeof(char*));
+            if(!command->argv) {
+                return -1;
+            }
+            command->argv[command->argc] = nullptr;
+
+            if(i >= command->argc) {
+                break;
+            }
+            --i;
+        }
+
     }
 
     return 0;

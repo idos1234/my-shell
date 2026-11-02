@@ -58,7 +58,13 @@ int execute_command(Command* command) {
         
         if(pid == 0) {
             if (command->output_filename != nullptr) {
-                int fd = open(command->output_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                int fd;
+
+                if(!command->append_output) {
+                    fd = open(command->output_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                } else {
+                    fd = open(command->output_filename, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                }
                 if (fd < 0) {
                     perror("myshell: open error");
                     exit(EXIT_FAILURE);

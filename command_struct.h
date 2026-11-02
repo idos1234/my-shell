@@ -8,6 +8,7 @@ typedef struct {
     int argc;
     char* output_filename;
     char* input_filename;
+    bool append_output;
 } Command;
 
 typedef struct Pipeline {
