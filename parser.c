@@ -230,6 +230,25 @@ int check_for_redirect(Command* command) {
             --i;
         }
 
+        // check for background execution
+        else if(!strcmp(command->argv[i], "&")) {
+            // Set the background execution flag
+            command->is_background = true;
+
+            //remove & from the argv
+            for (int j = i; j <= command->argc - 1; ++j) {
+                command->argv[j] = command->argv[j + 1];
+            }
+            
+            command->argc = command->argc - 1;
+            command->argv = realloc(command->argv, (command->argc + 1) * sizeof(char*));
+            if(!command->argv) {
+                return -1;
+            }
+            command->argv[command->argc] = nullptr;
+
+            break; // No need to check further since & should be at the end
+        }
     }
 
     return 0;

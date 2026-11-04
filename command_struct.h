@@ -10,6 +10,7 @@ typedef struct {
     char* input_filename;
     bool append_output;
     char* heredoc_delimiter;
+    bool is_background;
 } Command;
 
 typedef struct Pipeline {
