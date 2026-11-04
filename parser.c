@@ -403,6 +403,9 @@ BackgroundJob parse_background_job(char *str) {
 
     // calculate how many background jobs there are
     bg_job.pipeline_count = count_number_of_background_jobs(str);
+    if(bg_job.pipeline_count == 0) {
+        bg_job.pipeline_count = count_number_of_pipelines(str) + 1; // At least one job if no '&' is found
+    }
 
     // get all the background job arrays
     bg_job.pipelines = (Pipeline*)malloc((bg_job.pipeline_count + 1) * sizeof(Pipeline));
@@ -508,16 +511,11 @@ bool read_user_input() {
     {
     case 0:
         return true;
-        break;
     case -1:
         return false;
-        break;
     case 99:
         printf("Bye!\n");
         return false;
-        break;
-    default:
-        break;
     }
 
     return true;
