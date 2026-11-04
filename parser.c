@@ -270,6 +270,30 @@ int check_for_redirect(Command* command) {
     return 0;
 }
 
+int check_for_environment_variables(Command* command) {
+    for (int i = 0; i < command->argc; ++i) {
+        if (command->argv[i][0] == '$') {
+            char* env_var_name = command->argv[i] + 1; // Skip the '$'
+            char* env_var_value = getenv(env_var_name);
+            if (env_var_value) {
+                // Replace the argument with the environment variable's value
+                free(command->argv[i]); // Free the old string
+                command->argv[i] = strdup(env_var_value); // Duplicate the new value
+                if (!command->argv[i]) {
+                    return -1; // Memory allocation failed
+                }
+            } else {
+                // If the environment variable doesn't exist, replace it with an empty string
+                free(command->argv[i]);
+                command->argv[i] = strdup(""); // Set to empty string
+                if (!command->argv[i]) {
+                    return -1; // Memory allocation failed
+                }
+            }
+        }
+    }
+    return 0;
+}
 
 Command parse_command(char* str) {    
     // create command obj
@@ -365,6 +389,10 @@ Pipeline parse_pipeline(char *str, bool is_background) {
             
             // parse the current command
             pipeline.commands[cmd_idx] = parse_command(sub_cmd_str);
+            if(check_for_environment_variables(&pipeline.commands[cmd_idx]) != 0) {
+                clear_pipeline(&pipeline);
+                return pipeline;
+            }
             if(is_background) {
                 pipeline.commands[cmd_idx].is_background = true;
             }
@@ -390,6 +418,11 @@ Pipeline parse_pipeline(char *str, bool is_background) {
     
     remove_extra_spaces(sub_cmd_str);
     pipeline.commands[cmd_idx] = parse_command(sub_cmd_str);
+    if(check_for_environment_variables(&pipeline.commands[cmd_idx]) != 0) {
+        clear_pipeline(&pipeline);
+        return pipeline;
+    }
+
     check_for_redirect(&pipeline.commands[cmd_idx]);
     
     free(sub_cmd_str);
