@@ -47,7 +47,6 @@ int execute_builtin(char **argv) {
     return -1;
 }
 
-
 int execute_command(Command* command) {
     if(is_buitlin(command->argv[0])) {
         return execute_builtin(command->argv);
