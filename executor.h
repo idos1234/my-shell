@@ -15,6 +15,6 @@
 #define NUMBER_OF_BUILTIN 2
 
 extern char dest[256];
-int execute_pipeline(Pipeline *pipeline);
+int execute_background_job(BackgroundJob *bg_job);
 
 #endif

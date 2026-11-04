@@ -13,12 +13,19 @@ typedef struct {
     bool is_background;
 } Command;
 
-typedef struct Pipeline {
+typedef struct {
     Command *commands;
     int command_count;
+    bool is_background;
 } Pipeline;
+
+typedef struct {
+    Pipeline* pipelines;
+    int pipeline_count;
+} BackgroundJob;
 
 void clear_command(Command* command);
 void clear_pipeline(Pipeline* pipeline);
+void clear_background_job(BackgroundJob* bg_job);
 
 #endif

@@ -167,6 +167,9 @@ int execute_command(Command* command) {
 int execute_pipeline(Pipeline* pipeline) {
     // if it is single command - just run it
     if (pipeline->command_count == 1) {
+        if(pipeline->is_background) {
+            pipeline->commands[0].is_background = true;
+        }
         return execute_command(&pipeline->commands[0]);
     }
 
@@ -233,9 +236,32 @@ int execute_pipeline(Pipeline* pipeline) {
         close(pipe_fds[j]);
     }
 
-    // wait for child proccess
-    for (int j = 0; j < pipeline->command_count; j++) {
-        wait(NULL);
+    if (pipeline->is_background) {
+        // Background process: print the PID and don't block waiting for it
+        printf("[%d]\n", pid);
+        fflush(stdout); // Ensure the output is printed immediately
+    } else {
+        // wait for child proccess
+        for (int j = 0; j < pipeline->command_count; j++) {
+            wait(NULL);
+        }
+    }
+
+    return 0;
+}
+
+int execute_background_job(BackgroundJob *bg_job) {
+    for (int i = 0; i < bg_job->pipeline_count; ++i)
+    {
+        Pipeline *pipeline = &bg_job->pipelines[i];
+        if (pipeline->command_count <= 0) {
+            continue;
+        }
+
+        int code = execute_pipeline(pipeline);
+        if (code != 0) {
+            return code;
+        }
     }
 
     return 0;
