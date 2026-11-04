@@ -20,6 +20,8 @@ void clear_command(Command* command) {
     command->argv = nullptr;
     command->argc = 0;
     command->append_output = false;
+    command->heredoc_delimiter = nullptr;
+    command->is_background = false;
     
 }
 

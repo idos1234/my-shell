@@ -131,20 +131,32 @@ int execute_command(Command* command) {
                 close(heredoc_fd[0]);
             }
 
+            if (command->is_background) {
+                // If the command is to be run in the background, we can ignore SIGINT
+                signal(SIGINT, SIG_IGN);
+            }
+
             //child - execute command
             execvp(command->argv[0], command->argv);
 
             perror("myshell");
             exit(EXIT_FAILURE);
         } else if(pid > 0) {
-            int status;
-            pid_t terminated_pid = waitpid(pid, &status, 0);
+            if (command->is_background) {
+                // Background process: print the PID and don't block waiting for it
+                printf("[%d]\n", pid);
+                fflush(stdout); // Ensure the output is printed immediately
+            } else {
+                // Foreground process: block and wait for completion
+                int status;
+                pid_t terminated_pid = waitpid(pid, &status, 0);
 
-            if (WIFSIGNALED(status)) {
-                // Child was abnormally terminated by a signal
-                int signal_num = WTERMSIG(status);
-                printf("[Parent] Child %d was killed by signal: %d\n", terminated_pid, signal_num);
-                return -1;
+                if (WIFSIGNALED(status)) {
+                    // Child was abnormally terminated by a signal
+                    int signal_num = WTERMSIG(status);
+                    printf("[Parent] Child %d was killed by signal: %d\n", terminated_pid, signal_num);
+                    return -1;
+                }
             }
         }
     }
