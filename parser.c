@@ -67,6 +67,22 @@ int count_number_of_pipelines(char* str) {
     
 }
 
+int count_number_of_background_jobs(char* str) {
+    int count = 0;
+    int i = 0;
+
+    while(str[i] != '\0') {
+        if(str[i] == '&') {
+            ++count;
+        }
+
+        ++i;
+    }
+
+    return count;
+    
+}
+
 int check_for_redirect(Command* command) {
     for (int i = 0; i < command->argc; ++i)
     {
@@ -315,9 +331,12 @@ Command parse_command(char* str) {
     return command;
 }
 
-Pipeline parse_pipeline(char *str) {
+Pipeline parse_pipeline(char *str, bool is_background) {
     // create pipeline obj
     Pipeline pipeline = {0};
+    if(is_background) {
+        pipeline.is_background = true;
+    }
 
     // calculate how many commands there are
     pipeline.command_count = count_number_of_pipelines(str) + 1;
@@ -346,6 +365,9 @@ Pipeline parse_pipeline(char *str) {
             
             // parse the current command
             pipeline.commands[cmd_idx] = parse_command(sub_cmd_str);
+            if(is_background) {
+                pipeline.commands[cmd_idx].is_background = true;
+            }
 
             int code_redirect = check_for_redirect(&pipeline.commands[cmd_idx]); // check for redirects
             if(code_redirect != 0) {
@@ -374,6 +396,68 @@ Pipeline parse_pipeline(char *str) {
 
     return pipeline;
 }
+
+BackgroundJob parse_background_job(char *str) {
+    // create background job obj
+    BackgroundJob bg_job = {0};
+
+    // calculate how many background jobs there are
+    bg_job.pipeline_count = count_number_of_background_jobs(str);
+
+    // get all the background job arrays
+    bg_job.pipelines = (Pipeline*)malloc((bg_job.pipeline_count + 1) * sizeof(Pipeline));
+    if(!bg_job.pipelines) {
+        clear_background_job(&bg_job);
+        return bg_job;
+    }
+
+    int start_index = 0;
+    int background_job_idx = 0;
+    int i = 0;
+
+    while (str[i] != '\0') {
+        if (str[i] == '&') {
+            // get sub string until &
+            int len = i - start_index - 1;
+            char *sub_cmd_str = (char*)malloc(len + 1);
+            strncpy(sub_cmd_str, str + start_index, len);
+            sub_cmd_str[len] = '\0';
+
+            //remove extra spaces - around the background job
+            remove_extra_spaces(sub_cmd_str);
+
+            if (strlen(sub_cmd_str) == 0) {
+                free(sub_cmd_str);
+                continue;
+            }
+
+            // parse the current background job
+            bg_job.pipelines[background_job_idx].is_background = true;
+            bg_job.pipelines[background_job_idx] = parse_pipeline(sub_cmd_str, true);
+
+            free(sub_cmd_str);
+            ++background_job_idx;
+            start_index = i + 1;
+        }
+        i++;
+    }
+
+    if(i > start_index) {
+        // handle the last background job
+        int len = i - start_index;
+        char *sub_cmd_str = (char*)malloc(len + 1);
+        strncpy(sub_cmd_str, str + start_index, len);
+        sub_cmd_str[len] = '\0';
+
+        remove_extra_spaces(sub_cmd_str);
+        bg_job.pipelines[background_job_idx] = parse_pipeline(sub_cmd_str, false);
+        free(sub_cmd_str);
+    }
+    
+    return bg_job;
+}
+
+
 
 // Wait for commands
 // true - for normal commands
@@ -411,14 +495,14 @@ bool read_user_input() {
     }
 
 
-    Pipeline pipeline = parse_pipeline(input);
+    BackgroundJob bg_job = parse_background_job(input);
     
-    if (pipeline.commands == nullptr) {
+    if (bg_job.pipelines == nullptr) {
         return false;
     }
 
 
-    int code = execute_pipeline(&pipeline);
+    int code = execute_background_job(&bg_job);
 
     switch (code)
     {

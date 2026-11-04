@@ -38,3 +38,17 @@ void clear_pipeline(Pipeline* pipeline) {
     pipeline->commands = nullptr;
     pipeline->command_count = 0;
 }
+
+void clear_background_job(BackgroundJob* bg_job) {
+    for (int i = 0; i < bg_job->pipeline_count; ++i)
+    {
+        clear_pipeline(&bg_job->pipelines[i]);
+    }
+
+    if(bg_job->pipelines) {
+        free(bg_job->pipelines);
+    }
+
+    bg_job->pipelines = nullptr;
+    bg_job->pipeline_count = 0;
+}
