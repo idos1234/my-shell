@@ -47,6 +47,10 @@ int execute_builtin(char **argv) {
     return -1;
 }
 
+void sigint_heredoc_handler(int sig) {
+    // nothing to do here, just return to interrupt the read operation
+}
+
 int execute_command(Command* command) {
     if(is_buitlin(command->argv[0])) {
         return execute_builtin(command->argv);
@@ -63,15 +67,27 @@ int execute_command(Command* command) {
                 return -1;
             }
 
+            struct sigaction sa;
+            sa.sa_handler = sigint_heredoc_handler; // Set the signal handler for SIGINT
+            sigemptyset(&sa.sa_mask); // Initialize the signal set to empty
+            sa.sa_flags = 0; // No special flags
+            sigaction(SIGINT, &sa, nullptr); // Set the new signal action for SIGINT
+
             while (true) {
                 // Print the prompt first (just like Bash does for every line)
                 printf("> ");
                 fflush(stdout);
 
+                
                 char buffer[1024];
                 if (fgets(buffer, sizeof(buffer), stdin) == nullptr) {
-                    break;
+                    // If fgets returns NULL, it means EOF or an error occurred. We should handle this gracefully.
+                    close(heredoc_fd[0]);
+                    close(heredoc_fd[1]);
+                    printf("\n");
+                    return 0; // exit the heredoc input loop
                 }
+                printf("buffer: %s\n", buffer); // Debugging line to see what was read
 
                 // Remove trailing newline, carriage return, spaces, and tabs
                 int len = strlen(buffer);
@@ -89,6 +105,9 @@ int execute_command(Command* command) {
                 write(heredoc_fd[1], buffer, strlen(buffer));
                 write(heredoc_fd[1], "\n", 1);
             }
+
+            // Restore the default behavior for SIGINT after reading heredoc input
+            signal(SIGINT, SIG_IGN);
 
             // Close the write end in the parent so the reader doesn't hang
             close(heredoc_fd[1]);
@@ -133,6 +152,9 @@ int execute_command(Command* command) {
             if (command->is_background) {
                 // If the command is to be run in the background, we can ignore SIGINT
                 signal(SIGINT, SIG_IGN);
+            } else {
+                // For foreground processes, restore the default behavior for SIGINT
+                signal(SIGINT, SIG_DFL);
             }
 
             //child - execute command
@@ -140,7 +162,7 @@ int execute_command(Command* command) {
 
             perror("myshell");
             exit(EXIT_FAILURE);
-        } else if(pid > 0) {
+        } else if(pid > 0) {            
             if (command->is_background) {
                 // Background process: print the PID and don't block waiting for it
                 printf("[%d]\n", pid);
@@ -154,7 +176,7 @@ int execute_command(Command* command) {
                     // Child was abnormally terminated by a signal
                     int signal_num = WTERMSIG(status);
                     printf("[Parent] Child %d was killed by signal: %d\n", terminated_pid, signal_num);
-                    return -1;
+                    return 0;
                 }
             }
         }
@@ -189,6 +211,11 @@ int execute_pipeline(Pipeline* pipeline) {
     {
         pid = fork();
         if (pid == 0) {
+            printf("DEBUG: command[%d] = %s, output_file = %s, append = %d\n", 
+                i, pipeline->commands[i].argv[0], 
+                pipeline->commands[i].output_filename ? pipeline->commands[i].output_filename : "NULL",
+                pipeline->commands[i].append_output);
+
             // handle the input
             if (pipeline->commands[i].input_filename != nullptr) {
                 // direction for input file 
@@ -206,8 +233,12 @@ int execute_pipeline(Pipeline* pipeline) {
 
             // handle output
             if (pipeline->commands[i].output_filename != nullptr) {
-                // direction for input file 
-                int fd_out = open(pipeline->commands[i].output_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                int fd_out;
+                if (!pipeline->commands[i].append_output) {
+                    fd_out = open(pipeline->commands[i].output_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                } else {
+                    fd_out = open(pipeline->commands[i].output_filename, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                }
                 if (fd_out < 0) {
                     perror("myshell: open output error");
                     exit(EXIT_FAILURE);
@@ -217,6 +248,14 @@ int execute_pipeline(Pipeline* pipeline) {
             } else if (i < num_pipes) {
                 // if there isn't file - take next command as output
                 dup2(pipe_fds[i * 2 + 1], STDOUT_FILENO);
+            }
+
+            if (pipeline->commands[i].is_background) {
+                // If the command is to be run in the background, we can ignore SIGINT
+                signal(SIGINT, SIG_IGN);
+            } else {
+                // For foreground processes, restore the default behavior for SIGINT
+                signal(SIGINT, SIG_DFL);
             }
 
             // close all pipes' file descriptors
@@ -231,6 +270,7 @@ int execute_pipeline(Pipeline* pipeline) {
         }
     }
 
+    
     for (int j = 0; j < 2 * num_pipes; j++) {
         close(pipe_fds[j]);
     }
@@ -242,7 +282,16 @@ int execute_pipeline(Pipeline* pipeline) {
     } else {
         // wait for child proccess
         for (int j = 0; j < pipeline->command_count; j++) {
-            wait(NULL);
+            int status;
+            pid_t terminated_pid = waitpid(-1, &status, 0);
+
+            if (WIFSIGNALED(status)) {
+                // Child was abnormally terminated by a signal
+                int signal_num = WTERMSIG(status);
+                printf("[Parent] Child %d was killed by signal: %d\n", terminated_pid, signal_num);
+                return 0;
+            }
+            
         }
     }
 
