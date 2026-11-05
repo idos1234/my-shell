@@ -211,11 +211,6 @@ int execute_pipeline(Pipeline* pipeline) {
     {
         pid = fork();
         if (pid == 0) {
-            printf("DEBUG: command[%d] = %s, output_file = %s, append = %d\n", 
-                i, pipeline->commands[i].argv[0], 
-                pipeline->commands[i].output_filename ? pipeline->commands[i].output_filename : "NULL",
-                pipeline->commands[i].append_output);
-
             // handle the input
             if (pipeline->commands[i].input_filename != nullptr) {
                 // direction for input file 
