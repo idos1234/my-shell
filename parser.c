@@ -1,5 +1,8 @@
 #include "parser.h"
 
+struct termios orig_termios;
+
+
 void remove_extra_spaces(char *str) {
     int i = 0; // Pointer to read the original string
     int j = 0; // Pointer to write the cleaned string
@@ -494,6 +497,69 @@ BackgroundJob parse_background_job(char *str) {
 }
 
 
+// Restores the terminal to its default "cooked" state
+void disableRawMode() {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+}
+
+// Configures the terminal into raw mode
+void enableRawMode() {
+    // Get current terminal attributes
+    if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
+        perror("tcgetattr");
+        exit(1);
+    }
+
+    // Register clean-up function to restore settings on exit
+    atexit(disableRawMode);
+
+    struct termios raw = orig_termios;
+
+    /*
+     * Input Flags (c_iflag):
+     * BRKINT: Turn off break condition triggering SIGINT
+     * ICRNL: Stop translating Carriage Return (\r) to Newline (\n)
+     * INPCK: Disable parity checking
+     * ISTRIP: Disable stripping the 8th bit of characters
+     * IXON: Disable software flow control (Ctrl-S / Ctrl-Q)
+     */
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+
+    /*
+     * Output Flags (c_oflag):
+     * OPOST: Turn off all output processing (like converting \n to \r\n)
+     */
+    raw.c_oflag &= ~(OPOST);
+
+    /*
+     * Control Flags (c_cflag):
+     * CS8: Set character size to 8 bits per byte
+     */
+    raw.c_cflag |= (CS8);
+
+    /*
+     * Local Flags (c_lflag):
+     * ECHO: Turn off echoing of typed characters
+     * ICANON: Turn off canonical (line-by-line) mode
+     * IEXTEN: Disable extended input processing (Ctrl-V)
+     * ISIG: Disable signal characters (Ctrl-C to SIGINT, Ctrl-Z to SIGTSTP)
+     */
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+
+    /*
+     * Control Characters (c_cc):
+     * VMIN: Minimum number of bytes needed before read() can return
+     * VTIME: Maximum time to wait before read() returns (in tenths of a second)
+     */
+    raw.c_cc[VMIN] = 1;  // Read returns as soon as 1 byte is available
+    raw.c_cc[VTIME] = 0; // No timeout
+
+    // Apply the changes immediately using TCSAFLUSH
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
+        perror("tcsetattr");
+        exit(1);
+    }
+}
 
 // Wait for commands
 // true - for normal commands
@@ -502,14 +568,40 @@ bool read_user_input() {
     //start the shell
     getcwd(dest, sizeof(dest));
     printf("myshell:%s$ ", dest);
+    fflush(stdout);
+
+    // Enable raw mode for better input handling
+    enableRawMode();
 
     //get the input commands
     char input[MAX_INPUT];
 
-    if (fgets(input, sizeof(input), stdin) == nullptr) {
-        printf("Bye!\n");
-        return false;
+    int index = 0;
+    while (1) {
+        // Read character directly from raw stdin file descriptor
+        if (read(STDIN_FILENO, &input[index], 1) == -1) {
+            perror("read\n");
+            printf("Bye!\n");
+            fflush(stdout);
+            fflush(stderr);
+            return false;
+        }
+
+        printf("%c", input[index]); // Echo the character back to the terminal
+        fflush(stdout);
+
+        if (input[index] == '\r') {
+            printf("\n");
+            fflush(stdout);
+            disableRawMode(); // Restore terminal settings before processing the input
+            break;
+        }
+        ++index;
     }
+    
+    // Replace any carriage return characters with newline characters to standardize the input
+    input[strcspn(input, "\r")] = '\n';
+
 
     // Check if the input was too long and didn't fit into MAX_INPUT
     if (strchr(input, '\n') == NULL) {

@@ -7,7 +7,8 @@
 
 #include "executor.h"
 #include "command_struct.h"
-
+#include <termios.h>
+    
 
 #define MAX_INPUT 1024
 
