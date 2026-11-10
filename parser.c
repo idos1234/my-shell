@@ -1,5 +1,10 @@
 #include "parser.h"
 
+struct termios orig_termios;
+
+char history[100][MAX_INPUT];
+int history_count = 0;
+
 void remove_extra_spaces(char *str) {
     int i = 0; // Pointer to read the original string
     int j = 0; // Pointer to write the cleaned string
@@ -494,6 +499,69 @@ BackgroundJob parse_background_job(char *str) {
 }
 
 
+// Restores the terminal to its default "cooked" state
+void disableRawMode() {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+}
+
+// Configures the terminal into raw mode
+void enableRawMode() {
+    // Get current terminal attributes
+    if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
+        perror("tcgetattr");
+        exit(1);
+    }
+
+    // Register clean-up function to restore settings on exit
+    atexit(disableRawMode);
+
+    struct termios raw = orig_termios;
+
+    /*
+     * Input Flags (c_iflag):
+     * BRKINT: Turn off break condition triggering SIGINT
+     * ICRNL: Stop translating Carriage Return (\r) to Newline (\n)
+     * INPCK: Disable parity checking
+     * ISTRIP: Disable stripping the 8th bit of characters
+     * IXON: Disable software flow control (Ctrl-S / Ctrl-Q)
+     */
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+
+    /*
+     * Output Flags (c_oflag):
+     * OPOST: Turn off all output processing (like converting \n to \r\n)
+     */
+    raw.c_oflag &= ~(OPOST);
+
+    /*
+     * Control Flags (c_cflag):
+     * CS8: Set character size to 8 bits per byte
+     */
+    raw.c_cflag |= (CS8);
+
+    /*
+     * Local Flags (c_lflag):
+     * ECHO: Turn off echoing of typed characters
+     * ICANON: Turn off canonical (line-by-line) mode
+     * IEXTEN: Disable extended input processing (Ctrl-V)
+     * ISIG: Disable signal characters (Ctrl-C to SIGINT, Ctrl-Z to SIGTSTP)
+     */
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+
+    /*
+     * Control Characters (c_cc):
+     * VMIN: Minimum number of bytes needed before read() can return
+     * VTIME: Maximum time to wait before read() returns (in tenths of a second)
+     */
+    raw.c_cc[VMIN] = 1;  // Read returns as soon as 1 byte is available
+    raw.c_cc[VTIME] = 0; // No timeout
+
+    // Apply the changes immediately using TCSAFLUSH
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
+        perror("tcsetattr");
+        exit(1);
+    }
+}
 
 // Wait for commands
 // true - for normal commands
@@ -502,14 +570,114 @@ bool read_user_input() {
     //start the shell
     getcwd(dest, sizeof(dest));
     printf("myshell:%s$ ", dest);
+    fflush(stdout);
+
+    // Enable raw mode for better input handling
+    enableRawMode();
 
     //get the input commands
     char input[MAX_INPUT];
+    int history_index = history_count; // Start at the end of the history
 
-    if (fgets(input, sizeof(input), stdin) == nullptr) {
-        printf("Bye!\n");
-        return false;
+    int index = 0;
+    while (1) {
+        // Read character directly from raw stdin file descriptor
+        if (read(STDIN_FILENO, &input[index], 1) == -1) {
+            perror("read\n");
+            printf("Bye!\n");
+            fflush(stdout);
+            fflush(stderr);
+            return false;
+        }
+
+        if (index < MAX_INPUT - 1) {
+            printf("%c", input[index]); // Echo the character back to the terminal
+            fflush(stdout);
+        }
+
+        if (input[index] == '\r') {
+            disableRawMode(); // Restore terminal settings before processing the input
+            printf("\n");
+            fflush(stdout);
+            break;
+        }
+
+        if (input[index] == 127) { // Handle backspace
+            if (index > 0) {
+                --index;
+                input[index] = '\0';
+                printf("\b \b"); // Move back, print space, move back again
+                fflush(stdout);
+            }
+            continue; // Skip the rest of the loop to avoid incrementing index
+        }
+
+
+
+        if (input[index] == 27) {
+            // escape sequence detected, likely an arrow key or other special key
+            // check the next two characters to determine which key was pressed
+            char seq[2];
+            if (read(STDIN_FILENO, &seq[0], 1) == 1 && read(STDIN_FILENO, &seq[1], 1) == 1) {
+                if (seq[0] == '[') {
+                    if (seq[1] == 'A') {
+                        // arrow up
+                        if (history_index > 0) {
+                            // clear the current line
+                            printf("\33[2K\r");
+                            fflush(stdout);
+
+                            --history_index;
+
+                            // print the prompt and the command from history
+                            printf("myshell:%s$ %s", dest, history[history_index]);
+                            fflush(stdout);
+
+                            // update the input buffer with the previous command
+                            strncpy(input, history[history_index], MAX_INPUT);
+                            index = strlen(history[history_index]);
+                            continue; // skip the rest of the loop to avoid incrementing index
+                        }
+                    } 
+                    else if (seq[1] == 'B') {
+                        // arrow down
+                        if (history_index <= history_count - 1) {
+                            ++history_index;
+
+                            // clear the current line
+                            printf("\33[2K\r");
+                            // print the prompt and the command from history
+                            printf("myshell:%s$ %s", dest, history[history_index]);
+                            fflush(stdout);
+
+                            // update the input buffer with the previous command
+                            strncpy(input, history[history_index], MAX_INPUT);
+                            index = strlen(history[history_index]);
+                        } else {
+                            history_index = history_count;
+
+                            // clear the current line
+                            printf("\33[2K\r");
+                            // print the prompt and an empty line
+                            printf("myshell:%s$ ", dest);
+                            fflush(stdout);
+
+                            // reset the input buffer
+                            memset(input, 0, MAX_INPUT);
+                            index = 0;
+                        }
+                    }
+                }
+            }
+        }
+        if (index < MAX_INPUT - 1) {
+            ++index;
+        }
     }
+    
+    // Replace any carriage return characters with newline characters to standardize the input
+    input[strcspn(input, "\r")] = '\n';
+
 
     // Check if the input was too long and didn't fit into MAX_INPUT
     if (strchr(input, '\n') == NULL) {
@@ -524,6 +692,22 @@ bool read_user_input() {
 
     // remove the extra spaces
     remove_extra_spaces(input);
+
+    // Store the command in history if it's not empty
+    if (index > 1) { // index > 1 because index includes the '\n' character
+        if (history_count < 100) {
+            strncpy(history[history_count], input, MAX_INPUT);
+            history[history_count][MAX_INPUT - 1] = '\0'; // Ensure null-termination
+            ++history_count;
+        } else {
+            // If history is full, shift all commands up and add the new command at the end
+            for (int i = 1; i < 100; ++i) {
+                strncpy(history[i - 1], history[i], MAX_INPUT);
+            }
+            strncpy(history[99], input, MAX_INPUT);
+            history[99][MAX_INPUT - 1] = '\0'; // Ensure null-termination
+        }
+    }
     
     // Check if the command line is empty (press Enter only)
     if (input[0] == '\0') {
