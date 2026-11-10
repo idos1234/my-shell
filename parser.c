@@ -577,36 +577,47 @@ bool read_user_input() {
 
     //get the input commands
     char input[MAX_INPUT];
-    int history_index = history_count; // Start at the end of the history
+    char c;
 
-    int index = 0;
+    int history_index = history_count; // Start at the end of the history
+    int cursor_index = 0; // Track the current cursor position in the input buffer
+    int len = 0;
+
     while (1) {
         // Read character directly from raw stdin file descriptor
-        if (read(STDIN_FILENO, &input[index], 1) == -1) {
+        if (read(STDIN_FILENO, &c, 1) == -1) {
             perror("read\n");
-            printf("Bye!\n");
-            fflush(stdout);
             fflush(stderr);
             return false;
         }
 
-        if (index < MAX_INPUT - 1) {
-            printf("%c", input[index]); // Echo the character back to the terminal
-            fflush(stdout);
-        }
 
-        if (input[index] == '\r') {
-            disableRawMode(); // Restore terminal settings before processing the input
+        // Check if the character is end of line or return
+        if (c == '\r' || c == '\n') {
+            disableRawMode();
             printf("\n");
             fflush(stdout);
+            input[len] = '\0';
             break;
         }
 
-        if (input[index] == 127) { // Handle backspace
-            if (index > 0) {
-                --index;
-                input[index] = '\0';
-                printf("\b \b"); // Move back, print space, move back again
+        // Check if character is delete or backspace
+        if (c == 127 || c == 8) {
+            if (cursor_index > 0) {
+                memmove(&input[cursor_index - 1], &input[cursor_index], len - cursor_index); // Shift characters left
+                --len;
+                --cursor_index;
+                input[len] = '\0';
+                
+                // Clear the current line and reprint the prompt and updated input
+                printf("\33[2K\r");
+                // Print the prompt and the updated input
+                printf("myshell:%s$ %s", dest, input);
+                // Move the cursor back to the correct position
+                for (int i = 0; i < len - cursor_index; i++) {
+                    printf("\033[D");
+                }
+
                 fflush(stdout);
             }
             continue; // Skip the rest of the loop to avoid incrementing index
@@ -614,8 +625,8 @@ bool read_user_input() {
 
 
 
-        if (input[index] == 27) {
-            // escape sequence detected, likely an arrow key or other special key
+        // Check if the character is an arrow key or other special key (escape sequence)
+        if (c == 27) {
             // check the next two characters to determine which key was pressed
             char seq[2];
             if (read(STDIN_FILENO, &seq[0], 1) == 1 && read(STDIN_FILENO, &seq[1], 1) == 1) {
@@ -635,8 +646,8 @@ bool read_user_input() {
 
                             // update the input buffer with the previous command
                             strncpy(input, history[history_index], MAX_INPUT);
-                            index = strlen(history[history_index]);
-                            continue; // skip the rest of the loop to avoid incrementing index
+                            len = strlen(history[history_index]);
+                            cursor_index = len;
                         }
                     } 
                     else if (seq[1] == 'B') {
@@ -652,7 +663,8 @@ bool read_user_input() {
 
                             // update the input buffer with the previous command
                             strncpy(input, history[history_index], MAX_INPUT);
-                            index = strlen(history[history_index]);
+                            len = strlen(history[history_index]);
+                            cursor_index = len;
                         } else {
                             history_index = history_count;
 
@@ -664,14 +676,50 @@ bool read_user_input() {
 
                             // reset the input buffer
                             memset(input, 0, MAX_INPUT);
-                            index = 0;
+                            len = 0;
+                        }
+                    }
+                    else if (seq[1] == 'C') {
+                        // arrow right
+                        if (cursor_index < len) {
+                            printf("\033[C"); // Move cursor right
+                            fflush(stdout);
+                            ++cursor_index;
+                        }
+                    } 
+                    else if (seq[1] == 'D') {
+                        // arrow left
+                        if (cursor_index > 0) {
+                            printf("\033[D"); // Move cursor left
+                            fflush(stdout);
+                            --cursor_index;
                         }
                     }
                 }
             }
+
+            continue; // Skip the rest of the loop to avoid adding escape sequences to input
         }
-        if (index < MAX_INPUT - 1) {
-            ++index;
+
+        // Check if the character is printable
+        if (c >= 32 && c < 127) {
+            if (len < MAX_INPUT - 1) {
+                // Insert the character at the current cursor position and shift the rest of the string to the right
+                memmove(&input[cursor_index + 1], &input[cursor_index], len - cursor_index);
+                input[cursor_index] = c;
+                ++len;
+                ++cursor_index;
+                input[len] = '\0';
+
+                // clear the current line and reprint the prompt and updated input
+                printf("\33[2K\r");
+                printf("myshell:%s$ %s", dest, input);
+                // Move the cursor back to the correct position
+                for (int i = 0; i < len - cursor_index; i++) {
+                    printf("\033[D");
+                }
+                fflush(stdout);
+            }
         }
     }
     
@@ -694,7 +742,7 @@ bool read_user_input() {
     remove_extra_spaces(input);
 
     // Store the command in history if it's not empty
-    if (index > 1) { // index > 1 because index includes the '\n' character
+    if (len > 1) { // index > 1 because index includes the '\n' character
         if (history_count < 100) {
             strncpy(history[history_count], input, MAX_INPUT);
             history[history_count][MAX_INPUT - 1] = '\0'; // Ensure null-termination
