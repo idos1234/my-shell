@@ -2,6 +2,8 @@
 
 struct termios orig_termios;
 
+char history[100][MAX_INPUT];
+int history_count = 0;
 
 void remove_extra_spaces(char *str) {
     int i = 0; // Pointer to read the original string
@@ -575,6 +577,7 @@ bool read_user_input() {
 
     //get the input commands
     char input[MAX_INPUT];
+    int history_index = history_count; // Start at the end of the history
 
     int index = 0;
     while (1) {
@@ -587,16 +590,89 @@ bool read_user_input() {
             return false;
         }
 
-        printf("%c", input[index]); // Echo the character back to the terminal
-        fflush(stdout);
+        if (index < MAX_INPUT - 1) {
+            printf("%c", input[index]); // Echo the character back to the terminal
+            fflush(stdout);
+        }
 
         if (input[index] == '\r') {
+            disableRawMode(); // Restore terminal settings before processing the input
             printf("\n");
             fflush(stdout);
-            disableRawMode(); // Restore terminal settings before processing the input
             break;
         }
-        ++index;
+
+        if (input[index] == 127) { // Handle backspace
+            if (index > 0) {
+                --index;
+                input[index] = '\0';
+                printf("\b \b"); // Move back, print space, move back again
+                fflush(stdout);
+            }
+            continue; // Skip the rest of the loop to avoid incrementing index
+        }
+
+
+
+        if (input[index] == 27) {
+            // escape sequence detected, likely an arrow key or other special key
+            // check the next two characters to determine which key was pressed
+            char seq[2];
+            if (read(STDIN_FILENO, &seq[0], 1) == 1 && read(STDIN_FILENO, &seq[1], 1) == 1) {
+                if (seq[0] == '[') {
+                    if (seq[1] == 'A') {
+                        // arrow up
+                        if (history_index > 0) {
+                            // clear the current line
+                            printf("\33[2K\r");
+                            fflush(stdout);
+
+                            --history_index;
+
+                            // print the prompt and the command from history
+                            printf("myshell:%s$ %s", dest, history[history_index]);
+                            fflush(stdout);
+
+                            // update the input buffer with the previous command
+                            strncpy(input, history[history_index], MAX_INPUT);
+                            index = strlen(history[history_index]);
+                            continue; // skip the rest of the loop to avoid incrementing index
+                        }
+                    } 
+                    else if (seq[1] == 'B') {
+                        // arrow down
+                        if (history_index <= history_count - 1) {
+                            ++history_index;
+
+                            // clear the current line
+                            printf("\33[2K\r");
+                            // print the prompt and the command from history
+                            printf("myshell:%s$ %s", dest, history[history_index]);
+                            fflush(stdout);
+
+                            // update the input buffer with the previous command
+                            strncpy(input, history[history_index], MAX_INPUT);
+                            index = strlen(history[history_index]);
+                        } else {
+                            history_index = history_count;
+
+                            // clear the current line
+                            printf("\33[2K\r");
+                            // print the prompt and an empty line
+                            printf("myshell:%s$ ", dest);
+                            fflush(stdout);
+
+                            // reset the input buffer
+                            memset(input, 0, MAX_INPUT);
+                            index = 0;
+                        }
+                    }
+                }
+            }
+        }
+        if (index < MAX_INPUT - 1) {
+            ++index;
+        }
     }
     
     // Replace any carriage return characters with newline characters to standardize the input
@@ -616,6 +692,22 @@ bool read_user_input() {
 
     // remove the extra spaces
     remove_extra_spaces(input);
+
+    // Store the command in history if it's not empty
+    if (index > 1) { // index > 1 because index includes the '\n' character
+        if (history_count < 100) {
+            strncpy(history[history_count], input, MAX_INPUT);
+            history[history_count][MAX_INPUT - 1] = '\0'; // Ensure null-termination
+            ++history_count;
+        } else {
+            // If history is full, shift all commands up and add the new command at the end
+            for (int i = 1; i < 100; ++i) {
+                strncpy(history[i - 1], history[i], MAX_INPUT);
+            }
+            strncpy(history[99], input, MAX_INPUT);
+            history[99][MAX_INPUT - 1] = '\0'; // Ensure null-termination
+        }
+    }
     
     // Check if the command line is empty (press Enter only)
     if (input[0] == '\0') {
