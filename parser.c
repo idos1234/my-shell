@@ -113,6 +113,10 @@ int check_for_redirect(Command* command) {
             command->append_output = false;
 
             //remove > and filename from the argv
+            free(command->argv[i]);
+            free(command->argv[i + 1]);
+
+            //remove > and filename from the argv
             for (int j = i; j <= command->argc - 2; ++j) {
                 command->argv[j] = command->argv[j + 2];
             }
@@ -148,6 +152,9 @@ int check_for_redirect(Command* command) {
                 return -1;
             }
 
+            //remove < and filename from the argv
+            free(command->argv[i]);
+            free(command->argv[i + 1]);
 
             //remove > and filename from the argv
             for (int j = i; j <= command->argc - 2; ++j) {
@@ -187,6 +194,10 @@ int check_for_redirect(Command* command) {
 
             //set append as true
             command->append_output = true;
+
+            //remove >> and filename from the argv
+            free(command->argv[i]);
+            free(command->argv[i + 1]);
 
             //remove > and filename from the argv
             for (int j = i; j <= command->argc - 2; ++j) {
@@ -234,6 +245,10 @@ int check_for_redirect(Command* command) {
             }
 
             // Remove << and the delimiter from argv
+            free(command->argv[i]);
+            free(command->argv[i + 1]);
+
+            // Remove << and the delimiter from argv
             for (int j = i; j <= command->argc - 2; ++j) {
                 command->argv[j] = command->argv[j + 2];
             }
@@ -255,6 +270,9 @@ int check_for_redirect(Command* command) {
         else if(!strcmp(command->argv[i], "&")) {
             // Set the background execution flag
             command->is_background = true;
+
+            // Remove the '&' from argv and adjust argc
+            free(command->argv[i]);
 
             //remove & from the argv
             for (int j = i; j <= command->argc - 1; ++j) {
@@ -355,7 +373,7 @@ Command parse_command(char* str) {
         // Explicitly null-terminate the destination
         command.argv[command_index][len] = '\0';
     }
-    
+
 
     return command;
 }
@@ -431,6 +449,7 @@ Pipeline parse_pipeline(char *str, bool is_background) {
     check_for_redirect(&pipeline.commands[cmd_idx]);
     
     free(sub_cmd_str);
+    
 
     return pipeline;
 }
@@ -446,7 +465,7 @@ BackgroundJob parse_background_job(char *str) {
     }
 
     // get all the background job arrays
-    bg_job.pipelines = (Pipeline*)malloc((bg_job.pipeline_count + 1) * sizeof(Pipeline));
+    bg_job.pipelines = (Pipeline*)calloc(bg_job.pipeline_count + 1, sizeof(Pipeline));
     if(!bg_job.pipelines) {
         clear_background_job(&bg_job);
         return bg_job;
@@ -764,13 +783,17 @@ bool read_user_input() {
 
 
     BackgroundJob bg_job = parse_background_job(input);
-    
+
     if (bg_job.pipelines == nullptr) {
+        clear_background_job(&bg_job);
         return false;
     }
 
 
     int code = execute_background_job(&bg_job);
+
+    // Free allocated memory for the background job
+    clear_background_job(&bg_job);
 
     switch (code)
     {

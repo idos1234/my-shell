@@ -1,6 +1,6 @@
 CC = gcc
 AS = nasm
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -g -O0
 ASFLAGS = -f elf64
 
 # final exe file
@@ -36,10 +36,13 @@ command_struct.o: command_struct.c command_struct.h
 syscalls.o: syscalls.s
 	$(AS) $(ASFLAGS) syscalls.s -o syscalls.o
 
+# run valgrind to check for memory leaks
+valgrind: all
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./$(TARGET)
 
 # make clean
 clean:
 	rm -f $(OBJS) $(TARGET)
 
 # prevent name collisions with real files in the folder
-.PHONY: all clean
+.PHONY: all clean valgrind
