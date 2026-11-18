@@ -15,6 +15,10 @@ void clear_command(Command* command) {
     if(command->input_filename) {
         free(command->input_filename);
     }
+    if(command->heredoc_delimiter) {
+        free(command->heredoc_delimiter);
+    }
+
     command->input_filename = nullptr;
     command->output_filename = nullptr;
     command->argv = nullptr;
@@ -22,6 +26,7 @@ void clear_command(Command* command) {
     command->append_output = false;
     command->heredoc_delimiter = nullptr;
     command->is_background = false;
+    command->heredoc_delimiter = nullptr;
     
 }
 
